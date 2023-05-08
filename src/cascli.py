@@ -18,6 +18,7 @@ import datetime
 import itertools
 import subprocess
 import textwrap
+import uuid
 
 #: The dictionary, passed to :class:`logging.config.dictConfig`,
 #: is used to setup your logging formatters, handlers, and loggers
@@ -44,6 +45,10 @@ DEFAULT_LOGGING_DICT = {
     },
 }
 
+SERVICES_CONF = "/usr/lib/casrap/services"
+VASSALS_CONF = "/etc/uwsgi/conf.d"
+VASSALS_LOG = "/var/log/uwsgi"
+
 CURRENT_PATH = os.getcwd()
 #: Map verbosity level (int) to log level
 LOGLEVELS = {
@@ -61,25 +66,100 @@ log = logging.getLogger(__name__)
 log.addHandler(logging.NullHandler())
 
 
+def _avaliable_port():
+    import socket
+
+    s = socket.socket()
+    s.bind(("", 0))
+    p = s.getsockname()[1]
+    s.close()
+    return p
+
+
+def uwsgiconf():
+    _app_name = input("input your service app name: ")
+    if not all(map(str.isalpha, _app_name.split("_"))):
+        cli_exit("illegal service app name")
+
+    if not os.path.exists(os.path.join(CURRENT_PATH, f"{_app_name}.py")):
+        cli_exit(f"{_app_name}.py not found in current directory")
+
+    _grp_name = input("input your service group name: ")
+    if not all(map(str.isalpha, _grp_name.split("_"))):
+        cli_exit("illegal service group name")
+
+    _p = _avaliable_port()
+    _port = input(f"input your port number(press the enter key to use {_p})): ")
+
+    if not _port:
+        _port = _p
+    else:
+        if not _port.isdigit or int(_port) > 65535 or int(_port) < 1024:
+            cli_exit("invaliid port number")
+
+    if not os.path.exists(os.path.join(SERVICES_CONF, _grp_name)):
+        os.mkdir(os.path.join(SERVICES_CONF, _grp_name))
+
+    _cfg_file = os.path.join(SERVICES_CONF, _grp_name, f"{_app_name}.json")
+    if os.path.exists(_cfg_file):
+        cli_exit("already existed")
+
+    with open(_cfg_file, "w") as fp:
+        json.dump(
+            {
+                "uwsgi": {
+                    "name": _app_name,
+                    "http": f":{_port}",
+                    "chdir": CURRENT_PATH,
+                    "wsgi-file": os.path.join(CURRENT_PATH, f"{_app_name}.py"),
+                },
+            },
+            fp,
+            indent=4,
+        )
+
+
+def casrapconfig():
+    _system_code = input("input your system code:")
+    if not _system_code.isalnum():
+        cli_exit("illegal input")
+
+    with open("/etc/casrap/config.json", "w") as fp:
+        json.dump(
+            {
+                "system": {
+                    "code": _system_code,
+                    "key": str(uuid.uuid4()),
+                    "create_time": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                    "tracking": {"type": "", "config": "", "db": "", "host": ""},
+                },
+            },
+            fp,
+            indent=4,
+        )
+
+
 def cli_exit(msg, code=-1):
     log.error(msg)
     exit(code)
 
 
 class cmd:
-    SERVICES_CONF = "/usr/local/src/services"
-    VASSALS_CONF = "/var/run/vassals"
-    VASSALS_LOG = "/var/log/uwsgi"
-
     def __init__(self) -> None:
-        self.running_services = [os.path.splitext(f)[0] for f in os.listdir(self.VASSALS_CONF)]
+        if not os.path.exists(VASSALS_CONF):
+            cli_exit("uWSGI has not been installed")
+
+        if not os.path.exists(SERVICES_CONF):
+            cli_exit("casrap has not been installed")
+
+        self.running_services = [os.path.splitext(f)[0] for f in os.listdir(VASSALS_CONF)]
         # self.existed_services = [os.path.splitext(f)[0] for f in itertools.chain(*[files for _, _, files in os.walk(self.SERVICES_CONF)])]
 
         self.existed_services = {}
         self.grouped_services = {}
-        for d in os.listdir(self.SERVICES_CONF):
-            for f in os.listdir(os.path.join(self.SERVICES_CONF, d)):
-                self.existed_services[os.path.splitext(f)[0]] = (d, os.path.join(self.SERVICES_CONF, d), f)
+        for d in os.listdir(SERVICES_CONF):
+            for f in os.listdir(os.path.join(SERVICES_CONF, d)):
+                self.existed_services[os.path.splitext(f)[0]] = (d, os.path.join(SERVICES_CONF, d), f)
 
                 if d in self.grouped_services:
                     self.grouped_services[d].append(os.path.splitext(f)[0])
@@ -106,10 +186,10 @@ class cmd:
         g = [("GROUPS", "SERVICES", "RUNNING")]
         s = [("GROUPS", "SERVICE", "RUNNING")]
 
-        for d in os.listdir(self.SERVICES_CONF):
+        for d in os.listdir(SERVICES_CONF):
             g_s_cnt = 0
             g_rs_cnt = 0
-            for f in os.listdir(os.path.join(self.SERVICES_CONF, d)):
+            for f in os.listdir(os.path.join(SERVICES_CONF, d)):
                 f = os.path.splitext(f)[0]
                 g_s_cnt += 1
                 if f in self.running_services:
@@ -139,7 +219,7 @@ class cmd:
                 continue
 
             svc_path = os.path.join(self.existed_services.get(s)[1], self.existed_services.get(s)[2])
-            os.system(f"ln -s {svc_path} {os.path.join(self.VASSALS_CONF, os.path.basename(svc_path))}")
+            os.system(f"ln -s {svc_path} {os.path.join(VASSALS_CONF, os.path.basename(svc_path))}")
 
     def do_down(self, svc, group):
         svc = self.check(svc, group)
@@ -148,7 +228,7 @@ class cmd:
             if s not in self.running_services:
                 continue
             svc_path = os.path.join(self.existed_services.get(s)[1], self.existed_services.get(s)[2])
-            os.system(f"rm {os.path.join(self.VASSALS_CONF, os.path.basename(svc_path))}")
+            os.system(f"rm {os.path.join(VASSALS_CONF, os.path.basename(svc_path))}")
 
     def do_re(self, svc, group):
         svc = self.check(svc, group)
@@ -157,19 +237,27 @@ class cmd:
             if s not in self.running_services:
                 continue
             svc_path = os.path.join(self.existed_services.get(s)[1], self.existed_services.get(s)[2])
-            os.system(f"touch {os.path.join(self.VASSALS_CONF, os.path.basename(svc_path))}")
+            os.system(f"touch {os.path.join(VASSALS_CONF, os.path.basename(svc_path))}")
 
     def do_log(self, svc, group, follow):
         svc = self.check(svc, group)
 
         l = []
         for s in svc:
-            l.append(os.path.join(self.VASSALS_LOG, f"{s}.log"))
+            l.append(os.path.join(VASSALS_LOG, f"{s}.log"))
 
         os.system(f"tail {'-f' if follow else ''} {' '.join(l)}")
 
+    def do_gen(self, content):
+        if content == "uwsgiconf":
+            uwsgiconf()
+        elif content == "casrapconf":
+            casrapconfig()
+
+
 class codes_cmd:
     pass
+
 
 def parsecli(
     cliargs=None,
@@ -254,6 +342,9 @@ def parsecli(
     cmd_dbg = subparsers.add_parser("dbg", help="dbg <svc>", usage="cascli dbg <svc>...")
     cmd_dbg.add_argument("svc", help="using `all` represent all services", nargs="+")
 
+    cmd_gen = subparsers.add_parser("gen", help="gen <content> ...", usage="cascli gen <content>...")
+    cmd_gen.add_argument("content", help="the content you want", choices=["uwsgiconf", "casrapconf"])
+
     args = parser.parse_args(args=cliargs)
     return args
 
@@ -280,6 +371,8 @@ def proc(args):
         case "dbg":
             c.do_re(args.svc, False)
             c.do_log(args.svc, False, True)
+        case "gen":
+            c.do_gen(args.content)
         case _:
             pass
 
@@ -298,11 +391,10 @@ def main(cliargs=None) -> int:
     # List possible exceptions here and return error codes
     except Exception as error:  # FIXME: add a more specific exception here!
         log.fatal(error)
-        # raise
+        raise
         # Use whatever return code is appropriate for your specific exception
         return 10
 
 
 if __name__ == "__main__":
     sys.exit(main())
-
