@@ -1,0 +1,13 @@
+#!/sbin/openrc-run
+
+name="casrap"
+command="/usr/local/bin/$name"
+command_args="run"
+command_background="yes"
+pidfile="/var/lib/$RC_SVCNAME/$name.pid"
+output_log="/var/log/$name.log"
+error_log="/var/log/$name.err"
+depend() {
+        need net
+        after firewall
+}

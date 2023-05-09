@@ -119,7 +119,7 @@ def uwsgiconf():
         )
 
 
-def casrapconfig():
+def casrapconf():
     _system_code = input("input your system code:")
     if not _system_code.isalnum():
         cli_exit("illegal input")
@@ -260,7 +260,7 @@ class cmd:
         if content == "uwsgiconf":
             uwsgiconf()
         elif content == "casrapconf":
-            casrapconfig()
+            casrapconf()
 
 
 class codes_cmd:

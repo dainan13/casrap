@@ -1,0 +1,39 @@
+#!/bin/sh
+
+ln -sf /usr/lib/casrap/src/cascli.py /usr/local/bin/cascli
+
+ln -sf /usr/lib/casrap/src/casrap.py /usr/local/bin/casrap
+
+pip config set global.index-url https://pypi.tuna.tsinghua.edu.cn/simple
+
+pip install -r /usr/lib/casrap/requirements.txt
+
+mkdir -p /var/lib/casrap
+
+if [ -f /etc/uwsgi/uwsgi.ini ] && [ ! -f /etc/uwsgi/uwsgi.ini.original ]
+then
+    mv /etc/uwsgi/uwsgi.ini /etc/uwsgi/uwsgi.ini.original
+fi
+
+if [ -f /etc/uwsgi/vassals.ini ] && [ ! -f /etc/uwsgi/vassals.ini.original ]
+then
+    mv /etc/uwsgi/vassals.ini /etc/uwsgi/vassals.ini.original
+fi
+
+
+cat << UWSGIINI > /etc/uwsgi/uwsgi.ini
+[uwsgi]
+emperor = /etc/uwsgi/conf.d
+vassals-include = /etc/uwsgi/vassals.ini
+emperor-stats-server = :9291
+UWSGIINI
+
+
+cat << VASSALSINI > /etc/uwsgi/vassals.ini
+[uwsgi]
+pidfile = /var/run/uwsgi/%N.pid
+daemonize = /var/log/uwsgi/%N.log
+socket = /var/run/uwsgi/%N.sock
+plugins = http,python
+hearbeat = true
+VASSALSINI
