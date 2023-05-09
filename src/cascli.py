@@ -131,8 +131,16 @@ def casrapconfig():
                     "code": _system_code,
                     "key": str(uuid.uuid4()),
                     "create_time": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                    "tracking": {"type": "", "config": "", "db": "", "host": ""},
+                    "tracking": {},
                 },
+                "platform": {},
+                "application": {},
+                "role": {},
+                "menu": {},
+                "api": {},
+                "apidebug": {},
+                "service": {},
+                "apimap": {},
             },
             fp,
             indent=4,
@@ -391,7 +399,7 @@ def main(cliargs=None) -> int:
     # List possible exceptions here and return error codes
     except Exception as error:  # FIXME: add a more specific exception here!
         log.fatal(error)
-        raise
+        # raise
         # Use whatever return code is appropriate for your specific exception
         return 10
 
