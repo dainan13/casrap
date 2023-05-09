@@ -13,12 +13,16 @@ import random
 
 import asyncio
 
-import uuid 
 import hashlib
 
 import user_agents
 
 import jasorm
+
+import functools
+print = functools.partial(print, flush=True)
+
+
 #import smartsnow
 
 
