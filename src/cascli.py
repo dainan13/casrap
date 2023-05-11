@@ -78,14 +78,14 @@ def _avaliable_port():
 
 def uwsgiconf():
     _app_name = input("input your service app name: ")
-    if not all(map(str.isalpha, _app_name.split("_"))):
+    if not all(map(str.isalnum, _app_name.split("_"))):
         cli_exit("illegal service app name")
 
     if not os.path.exists(os.path.join(CURRENT_PATH, f"{_app_name}.py")):
         cli_exit(f"{_app_name}.py not found in current directory")
 
     _grp_name = input("input your service group name: ")
-    if not all(map(str.isalpha, _grp_name.split("_"))):
+    if not all(map(str.isalnum, _grp_name.split("_"))):
         cli_exit("illegal service group name")
 
     _p = _avaliable_port()
