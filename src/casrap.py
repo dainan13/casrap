@@ -15,6 +15,8 @@ import asyncio
 
 import hashlib
 
+import aiohttp
+
 import user_agents
 
 import jasorm
@@ -666,28 +668,29 @@ class App(object):
         
         return 200, passport, session
     
-    # def cmd__basicauth( self, url, header, client_ip, proto ):
+     def cmd__findapi( self, url ):
         
-    #     account, password = base64.b64decode(header).split(b':',1)
+        apicode = '/'+url.strip('/')
+        apimod = url.strip('/').split('/')[0]
         
-    #     account = account.decode('ascii')
+        if apimod in ('public', 'common', 'inner') :
+            apimod = url.strip('/').split('/')[1]
+            
+        apisrv = self.services.get(apimod, None) or self.services.get('$', None)
+        apiaddr = random.choice(apisrv['backends']) if apisrv and apisrv.get('backends') else None
+        apiaddr = 'local' if apimod == 'casrap' else apiaddr
         
-    #     acc_info = self.db.user_basic.where(account=account).select()
+        if apiaddr == None :
+            return 503, {
+            }, {}
         
-    #     if len(acc_info) == 0:
-    #         authpass = False
-    #     else :
-    #         acc_info = acc_info[0]
-    #         authpass = bool( hashlib.sha1(password) == acc_info['password'] )
+        passport = {
+            "api_addr": apiaddr,
+            "api_mod": apimod,
+            "api_code": apicode,
+        }
         
-    #     return (200 if authpass else 400), {
-    #         "authpass": authpass,
-    #         "authrole": '',
-    #         "trace_sn": trace_sn,
-    #         "client_sn": client_sn,
-    #         "api": apicode,
-    #         "uri": url,
-    #     }, {}
+        return 200, passport, {}
     
     def cmd__logapi( self, trace_sn, api_code, method, proto, status, client_sn, client_ip, uahash, ja3hash, used_time ):
         
@@ -1119,7 +1122,7 @@ class App(object):
             
         writer.close()
     
-    async def nacos_service( self, nacoshost,  ):
+    async def nacos_service( self, nacoshost, namespace ):
         
         async with aiohttp.ClientSession() as session:
             
