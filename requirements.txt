@@ -3,3 +3,4 @@ redislite
 hashids
 user_agents
 hiredis
+aiohttp
