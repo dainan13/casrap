@@ -1014,6 +1014,11 @@ class App(object):
             'appclose': plat['appclose']
         }
     
+    def casrap__get_roles(self, __session):
+        return 200, {}, {
+            'roles' : [{"code":r["code"],"name":r["name"]} for r in self.roles.values()]
+        }
+
     async def process_command(self, writer, command, *args):
         
         try :
