@@ -185,8 +185,8 @@ class App(object):
             assert 'namespace' in nacos_config, 'parse error /discovery/nacos/namespace'
             assert type(nacos_config['namespace']) == str, 'parse error /discovery/nacos/namespace'
             assert re.match('^[a-f0-9]{8}-?[a-f0-9]{4}-?4[a-f0-9]{3}-?[89ab][a-f0-9]{3}-?[a-f0-9]{12}\Z', nacos_config['namespace']), 'parse error /discovery/nacos/namespace'
-            
-        self.discovery = discovery
+
+            self.discovery["nacos"] = nacos_config
         
         return
     
@@ -668,7 +668,7 @@ class App(object):
         
         return 200, passport, session
     
-     def cmd__findapi( self, url ):
+    def cmd__findapi( self, url ):
         
         apicode = '/'+url.strip('/')
         apimod = url.strip('/').split('/')[0]
@@ -1135,7 +1135,7 @@ class App(object):
             }
             async with session.get(nacoshost+'/nacos/v1/ns/service/list', params=params) as resp:
                 
-                print(resp.status)
+                # print(resp.status)
                 #print(await resp.text())
                 
                 services = json.loads( await resp.text() )["doms"]
@@ -1148,7 +1148,7 @@ class App(object):
                 }
                 async with session.get(nacoshost+'/nacos/v1/ns/instance/list', params=params) as resp:
                     
-                    print(resp.status)
+                    # print(resp.status)
                     #print(await resp.text())
                 
                     instances = [ "http://%(ip)s:%(port)s" % h for h in json.loads( await resp.text() )["hosts"] if h['healthy'] == True ]
