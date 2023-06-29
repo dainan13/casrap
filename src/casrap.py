@@ -270,9 +270,6 @@ class App(object):
         self.services = {}
         self.load_service( config['service'] )
         
-        self.discovery = {}
-        self.load_discovery( config.get('discovery', {}) )
-        
         self.apps = {}
         self.load_application( config['application'] )
         
@@ -348,6 +345,7 @@ class App(object):
         syscode = self.system['code']
         
         #print( 'SYSTEM', syscode, datetime.datetime.now() )
+        self.reload()
         
         r = {
             '{}$castag'.format(syscode): str(self.castag)
@@ -419,7 +417,7 @@ class App(object):
             xapp = self.apps['$']
             app = json.load( urllib.request.urlopen(xapp['req'].format(appcode) ) )
             app = { 'code':app['result']['appcode'], 'name':app['result']['appname'], 'allow':[] }
-        
+
         if app is None or (platcode not in self.system['debug'] and platcode not in app['allow']) :
             
             return 403, {
@@ -885,9 +883,13 @@ class App(object):
         self.redis.hset('userroles', user_id, roles)
         
         return 200, {}, True
-    
-    def casrap__get_userrole( self, __session, user_id ):
-        
+
+    def casrap__get_roles(self, __session):
+        return 200, {}, {
+            'roles' : [{"code":r["code"],"name":r["name"]} for r in self.roles.values()]
+        }
+
+    def casrap__get_userrole( self, __session, user_id=None ):
         if user_id == None :
             user_id = __session['user_id']
         
@@ -939,6 +941,32 @@ class App(object):
             "menus":rootm['children'] if rootm else []
         }
     
+    def casrap__get_usermenu(self, __session, user_id=None):
+        print(__session)
+        if user_id == None:
+            user_id = __session['user_id']
+
+        roles = self.redis.hget('userroles', user_id)
+        roles = pickle.loads(roles or b'\x80\x04\x8f\x94.')
+        
+        r = []
+
+        for menucode, menudata in self.menu.items():
+            if not menucode:
+                continue
+
+            if set(menudata['allow']) & {f"{__session['platcode']}:{r}" for r in roles}:
+                r.append({
+                    'name':menudata['name'],
+                    'menu_type':menudata['menu_type'],
+                    'code':menudata['code'],
+                    'url':menudata['url']
+                })
+
+        
+        return 200, {}, r
+        
+
     def _get_menu( self, root, depth, plat, urcodes, anchorapp ):
         
         if depth < 0 :
@@ -1041,11 +1069,6 @@ class App(object):
             'appclose': plat['appclose']
         }
     
-    def casrap__get_roles(self, __session):
-        return 200, {}, {
-            'roles' : [{"code":r["code"],"name":r["name"]} for r in self.roles.values()]
-        }
-
     async def process_command(self, writer, command, *args):
         
         try :
@@ -1121,57 +1144,7 @@ class App(object):
                 break
             
         writer.close()
-    
-    async def nacos_service( self, nacoshost, namespace ):
-        
-        async with aiohttp.ClientSession() as session:
-            
-            #https://dev_nacos.zyhxjh.work/nacos/v1/console/namespaces
-            
-            params = {
-                "pageNo":1,
-                "pageSize":9999,
-                "namespaceId":namespace,
-            }
-            async with session.get(nacoshost+'/nacos/v1/ns/service/list', params=params) as resp:
-                
-                # print(resp.status)
-                #print(await resp.text())
-                
-                services = json.loads( await resp.text() )["doms"]
-                
-            for srv in services :
-                
-                params = {
-                    "serviceName": srv,
-                    "namespaceId": namespace,
-                }
-                async with session.get(nacoshost+'/nacos/v1/ns/instance/list', params=params) as resp:
-                    
-                    # print(resp.status)
-                    #print(await resp.text())
-                
-                    instances = [ "http://%(ip)s:%(port)s" % h for h in json.loads( await resp.text() )["hosts"] if h['healthy'] == True ]
-                    
-                    if srv in self.services :
-                        self.services[srv]['backends'] = instances
-                    else :
-                        self.services[srv] = {'code':srv, "backends": instances}
-        
-        return
-    
-    async def timetask( self ):
-        
-        while(True):
-            
-            self.reload()
-            
-            if self.discovery['nacos'] :
-                await self.nacos_service(self.discovery['nacos']['url'], self.discovery['nacos']['namespace'])
-            
-            await asyncio.sleep(2)
-        
-        return
+
 
 
 import hiredis
@@ -1247,7 +1220,6 @@ class StreamReader(asyncio.StreamReader):
     readexactly = _read_not_allowed
 
 
-
 def run( conf_file ):
     
     app = App( conf_file )
@@ -1271,14 +1243,12 @@ def run( conf_file ):
         coro = loop.create_unix_server(factory, sockfile)
         
     server = loop.run_until_complete(coro)
-    tmtask = loop.create_task(app.timetask())
-    
+
     try:
         loop.run_forever()
     except KeyboardInterrupt:
         pass
-    
-    tmtask.cancel()
+
     server.close()
     loop.run_until_complete(server.wait_closed())
     loop.close()
