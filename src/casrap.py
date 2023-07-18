@@ -14,6 +14,7 @@ import random
 import asyncio
 
 import hashlib
+import hmac
 
 import aiohttp
 
@@ -794,7 +795,40 @@ class App(object):
         return {
             "trace_sn": trace_sn,
         }
-    
+
+    def cmd__aclcert(self, ticket, uri):
+        # 401 Unauthorized
+        # 408 Request Timeout
+        # 429 Too Many Requests
+
+        SECRET= self.system.get("secret")
+        TOLERANCE = self.system.get("tolerance")
+        THROTTLE = self.system.get("throttle")
+        req_ts, session_code, req_sig = ticket.split('-')
+
+        if session_code:
+            cnt = self.redis.get(f"ACKCERT{session_code}")
+            if cnt:
+                if cnt >= THROTTLE:
+                    return 429, {}, {}
+                self.redis.incr(f'ACKCERT{session_code}', 1)
+            else:
+                self.redis.incr(f'ACKCERT{session_code}', 1)
+                self.redis.expire(f"ACKCERT{session_code}", TOLERANCE)
+
+        if int(time.time()) - int(req_ts) > TOLERANCE:
+            return 408, {}, {}
+        
+        sig = hmac.digest(SECRET.encode(), f"{req_ts}{session_code}{uri}".encode(), hashlib.sha256).hex()
+
+        if sig != req_sig:
+            return 401, {}, {}
+
+        # curl -L -H "ticket: $(date +%s)-$(echo -n $(date +%s)abcde|sha256sum|awk '{print $1}')" -v --cert cltcrt.pem --key cltcrt.key --cacert chain.pem  https://api3m.zyhxjh.top
+        # curl -L -H "ticket: $(date +%s)-qqq-$(echo -n $(date +%s)qqq/|openssl dgst -sha256 -hmac abcde|awk '{print $2}')" -v --cert cltcrt.pem --key cltcrt.key --cacert chain.pem  https://api3m.zyhxjh.top
+
+        return 200, {}, {}
+
     def cmd__casrap( self, trace_sn, api, kwargs ):
         
         print('<<', trace_sn, api, kwargs )
@@ -942,7 +976,6 @@ class App(object):
         }
     
     def casrap__get_usermenu(self, __session, user_id=None):
-        print(__session)
         if user_id == None:
             user_id = __session['user_id']
 
@@ -1088,7 +1121,6 @@ class App(object):
             print(">", command, args)
         
         func = getattr(self, "cmd__"+command.lower(), None)
-        
         if func is None :
             writer.write(b"-Invalid Command\r\n")
             await writer.drain()
