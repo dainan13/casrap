@@ -804,12 +804,13 @@ class App(object):
         SECRET= self.system.get("secret")
         TOLERANCE = self.system.get("tolerance")
         THROTTLE = self.system.get("throttle")
+
         req_ts, session_code, req_sig = ticket.split('-')
 
         if session_code:
             cnt = self.redis.get(f"ACKCERT{session_code}")
             if cnt:
-                if cnt >= THROTTLE:
+                if int(cnt.decode()) >= THROTTLE:
                     return 429, {}, {}
                 self.redis.incr(f'ACKCERT{session_code}', 1)
             else:
