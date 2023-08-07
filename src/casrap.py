@@ -241,7 +241,10 @@ class App(object):
             menu['allow'] = set(menu['allow'])
         
         return
-    
+
+    def load_secure(self,config):
+        self.secure = config
+
     def reload( self ):
         
         _modified = os.path.getmtime(self.configfilepath)
@@ -285,6 +288,8 @@ class App(object):
         self.menu = {}
         self.load_menu( config['menu'] )
         
+        self.load_secure(config['secure'])
+
         return
     
     def check_session( self, platcode, session_code, plat ):
@@ -796,14 +801,14 @@ class App(object):
             "trace_sn": trace_sn,
         }
 
-    def cmd__aclcert(self, ticket, uri):
+    def cmd__aclcert(self, platcode, ticket, uri):
         # 401 Unauthorized
         # 408 Request Timeout
         # 429 Too Many Requests
 
-        SECRET= self.system.get("secret")
-        TOLERANCE = self.system.get("tolerance")
-        THROTTLE = self.system.get("throttle")
+        SECRET= self.secure[platcode].get("secret")
+        TOLERANCE = self.secure[platcode].get("tolerance")
+        THROTTLE = self.secure[platcode].get("throttle")
 
         req_ts, session_code, req_sig = ticket.split('-')
 
