@@ -898,7 +898,20 @@ class App(object):
     
     def cmd__redis(self, *args):
         try:
-            return 200, {}, self.redis.execute_command(*args)
+            r = []
+            for e in self.redis.execute_command(*args):
+                try:
+                    e = pickle.loads(e)
+                except:
+                    pass
+
+                if type(e) == bytes:
+                    e = e.decode('utf-8')
+                if type(e) == set:
+                    e = list(e)
+                r.append(e)
+            return 200, {}, r
+        
         except Exception as err:
             return 400, {}, {
                 "error": err.args[0],
