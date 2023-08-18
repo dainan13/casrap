@@ -830,10 +830,11 @@ class App(object):
         if sig != req_sig:
             return 401, {}, {}
 
-        # curl -L -H "ticket: $(date +%s)-$(echo -n $(date +%s)abcde|sha256sum|awk '{print $1}')" -v --cert cltcrt.pem --key cltcrt.key --cacert chain.pem  https://api3m.zyhxjh.top
-        # curl -L -H "ticket: $(date +%s)-qqq-$(echo -n $(date +%s)qqq/|openssl dgst -sha256 -hmac abcde|awk '{print $2}')" -v --cert cltcrt.pem --key cltcrt.key --cacert chain.pem  https://api3m.zyhxjh.top
-
-        return 200, {}, {}
+        # curl -L -H "ticket: $(date +%s)-$(echo -n $(date +%s)abcde|sha256sum|awk '{print $1}')" -v --cert cltcrt.pem --key cltcrt.key --cacert chain.pem  https://test.com
+        # curl -L -H "ticket: $(date +%s)-ss-$(echo -n $(date +%s)ss/|openssl dgst -sha256 -hmac abcde|awk '{print $2}')" -v --cert cltcrt.pem --key cltcrt.key --cacert chain.pem  https://api.test.com
+        # curl -L -H "ticket: $(date +%s)-ss-$(echo -n $(date +%s)ss/api/test|openssl dgst -sha256 -hmac abcde|awk '{print $2}')" -v --cert client.pem --key client-key.pem --cacert ca.pem  https://api.test.com/api/test
+        
+        return 200, session_code, {}
 
     def cmd__casrap( self, trace_sn, api, kwargs ):
         
@@ -895,6 +896,14 @@ class App(object):
         
         return r
     
+    def cmd__redis(self, *args):
+        try:
+            return 200, {}, self.redis.execute_command(*args)
+        except Exception as err:
+            return 400, {}, {
+                "error": err.args[0],
+            }
+        
     def casrap__set_session( self, _, platcode, user_id, user_name, user_account, session_id ):
         
         curtime = int(time.time())
@@ -1004,7 +1013,6 @@ class App(object):
 
         
         return 200, {}, r
-        
 
     def _get_menu( self, root, depth, plat, urcodes, anchorapp ):
         
@@ -1019,7 +1027,6 @@ class App(object):
         if root != "" :
             allow = rootm['allow'] & urcodes 
             if not allow :
-                print('xxxxxx', root, depth, rootm['allow'], urcodes )
                 return None
         else :
             allow = {'$anyone'}
@@ -1131,9 +1138,10 @@ class App(object):
             writer.write(b"-Invalid Command\r\n")
             await writer.drain()
             return True
-            
+        
         try :
-            args = dict( tuple(a.decode('utf-8').split("=",1)) for a in args )
+            if command != "redis":
+                args = dict( tuple(a.decode('utf-8').split("=",1)) for a in args )
         except :
             import traceback
             traceback.print_exc()
@@ -1142,7 +1150,11 @@ class App(object):
             return True
             
         try :
-            status, header, data = func( **args )
+            if command != "redis":
+                status, header, data = func( **args )
+            else:
+                status, header, data = func( *args )
+
             status = str(status).encode('ascii')
             header = json.dumps(header, ensure_ascii=False).encode("utf-8")
             data = json.dumps(data, ensure_ascii=True).encode("utf-8")
